@@ -19,7 +19,7 @@ pygame.display.set_caption("BIRGE OQU")
 # Загрузка фоновой музыки
 pygame.mixer.init()
 try:
-    pygame.mixer.music.load("sound.mp3")
+    pygame.mixer.music.load("arcade.mp3")
     pygame.mixer.music.set_volume(0.5)
     pygame.mixer.music.play(-1)  # Воспроизведение музыки в бесконечном цикле
 except pygame.error as e:
