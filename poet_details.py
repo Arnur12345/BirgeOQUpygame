@@ -15,11 +15,6 @@ class QuestionDisplay:
     def __init__(self, screen, questions_data, background_path, poet_path):
         """
         Класс для отображения вопросов и вариантов ответов.
-
-        :param screen: Экран Pygame.
-        :param questions_data: Список словарей с вопросами, вариантами и правильными ответами.
-        :param background_path: Путь к изображению фона для вопросов.
-        :param poet_path: Путь к изображению поэта.
         """
         self.screen = screen
         self.questions = questions_data
@@ -30,36 +25,16 @@ class QuestionDisplay:
         self.button_width = 400
         self.button_height = 60
         self.button_margin = 20
+        self.completed_degrees = set()  # Хранит пройденные уровни
 
     def display(self):
         """
-        Отображает картину поэта на 10 секунд, затем предлагает выбрать уровень вопроса.
+        Запускает процесс отображения уровней и вопросов.
         """
-        self.display_poet_image()
-        selected_degree = self.display_degree_selection()
-        self.display_questions_by_degree(selected_degree)
-
-    def display_poet_image(self):
-        """
-        Отображает картину поэта на 10 секунд.
-        """
-        poet_image = pygame.image.load(self.poet_path)
-        poet_image = pygame.transform.scale(poet_image, (WIDTH, HEIGHT))
-        end_time = time.time() + 10  # 10 секунд для отображения
-        font = pygame.font.Font(None, 48)
-
-        while time.time() < end_time:
-            self.screen.fill((0, 0, 0))
-            self.screen.blit(poet_image, (0, 0))
-
-            # Отображение таймера
-            remaining_time = int(end_time - time.time())
-            timer_text = f"{remaining_time} секунд"
-            timer_surface = font.render(timer_text, True, (255, 255, 255))
-            self.screen.blit(timer_surface, (20, 20))
-
-            pygame.display.flip()
-            time.sleep(1)
+        while len(self.completed_degrees) < 5:  # Пока не все уровни пройдены
+            selected_degree = self.display_degree_selection()
+            self.display_questions_by_degree(selected_degree)
+        self.display_completion_message()
 
     def display_degree_selection(self):
         """
@@ -71,17 +46,20 @@ class QuestionDisplay:
         buttons = []
 
         for i, degree in enumerate(degrees):
-            button_rect = pygame.Rect(WIDTH // 2 - self.button_width // 2,
-                                       200 + i * (self.button_height + self.button_margin),
-                                       self.button_width,
-                                       self.button_height)
+            button_rect = pygame.Rect(
+                WIDTH // 2 - self.button_width // 2,
+                200 + i * (self.button_height + self.button_margin),
+                self.button_width,
+                self.button_height
+            )
             buttons.append((button_rect, degree))
 
         selected_degree = None
         while not selected_degree:
             self.screen.blit(background, (0, 0))
             for button_rect, degree in buttons:
-                pygame.draw.rect(self.screen, (50, 50, 50), button_rect, border_radius=10)
+                color = (0, 255, 0) if degree in self.completed_degrees else (50, 50, 50)
+                pygame.draw.rect(self.screen, color, button_rect, border_radius=10)
                 pygame.draw.rect(self.screen, (255, 255, 255), button_rect, 2, border_radius=10)
                 text_surface = self.button_font.render(degree, True, (255, 255, 255))
                 text_x = button_rect.centerx - text_surface.get_width() // 2
@@ -96,7 +74,7 @@ class QuestionDisplay:
                     sys.exit()
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     for button_rect, degree in buttons:
-                        if button_rect.collidepoint(event.pos):
+                        if button_rect.collidepoint(event.pos) and degree not in self.completed_degrees:
                             selected_degree = degree
 
         return selected_degree
@@ -108,17 +86,95 @@ class QuestionDisplay:
         filtered_questions = [q for q in self.questions if q.get("degree") == degree]
         for question_data in filtered_questions:
             self.display_question(question_data)
+        self.completed_degrees.add(degree)  # Отмечаем уровень как пройденный
+
+    def display_poet_image(self):
+        """
+        Отображает изображение поэта на экране с обратным отсчетом в течение 10 секунд.
+        """
+        poet_image = pygame.image.load(self.poet_path)
+        poet_image = pygame.transform.scale(poet_image, (WIDTH, HEIGHT))  # Масштабируем изображение под размер экрана
+        start_time = pygame.time.get_ticks()  # Фиксируем начальное время
+
+        running = True
+        while running:
+            elapsed_time = (pygame.time.get_ticks() - start_time) // 1000  # Считаем прошедшее время в секундах
+            remaining_time = max(0, 10 - elapsed_time)  # Осталось времени (максимум 10 секунд)
+
+            # Если время истекло, завершаем цикл
+            if remaining_time == 0:
+                running = False
+
+            # Отображаем изображение и таймер
+            self.screen.blit(poet_image, (0, 0))
+            timer_text = f"Уақыты: {remaining_time} секунд"
+            timer_surface = self.font.render(timer_text, True, (255, 255, 255))
+
+
+            timer_x = 20  # Располагаем таймер в левом верхнем углу
+            timer_y = 20
+            self.screen.blit(timer_surface, (timer_x, timer_y))
+
+            # Обновляем экран
+            pygame.display.flip()
+
+            # Проверяем события (например, выход из приложения)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            # Немного задерживаем цикл для экономии ресурсов
+            pygame.time.delay(100)
+ 
+    
+    def draw_multiline_text(self, surface, text, x, y, font, color, max_words_per_line=8, line_spacing=10):
+        """
+        Рисует текст, разделённый на строки, если он превышает заданное количество слов на строку.
+
+        :param surface: Поверхность для рисования.
+        :param text: Текст для отображения.
+        :param x: Координата X.
+        :param y: Координата Y.
+        :param font: Шрифт.
+        :param color: Цвет текста.
+        :param max_words_per_line: Максимальное количество слов в одной строке.
+        :param line_spacing: Расстояние между строками.
+        """
+        words = text.split()
+        lines = []
+
+        # Разделение текста на строки
+        while len(words) > 0:
+            line = " ".join(words[:max_words_per_line])
+            lines.append(line)
+            words = words[max_words_per_line:]
+
+        # Рисуем каждую строку отдельно
+        for i, line in enumerate(lines):
+            line_surface = font.render(line, True, color)
+            surface.blit(line_surface, (x, y + i * (font.get_height() + line_spacing)))
+
+    def display(self):
+        """
+        Запускает процесс отображения изображения поэта, уровней и вопросов.
+        """
+        self.display_poet_image()  # Показ изображения поэта
+        while len(self.completed_degrees) < 5:  # Пока не все уровни пройдены
+            selected_degree = self.display_degree_selection()
+            self.display_questions_by_degree(selected_degree)
+        self.display_completion_message()
+
 
     def display_question(self, question_data):
         """
-        Отображает один вопрос на фоне `questions.jpg` с таймером на 15 секунд.
-        Для категории "Жұмбақтар" текстового поля нет, только 10-секундный таймер.
+        Отображает один вопрос с переносом текста и таймером.
         """
         question_text = question_data.get("question", "Вопрос отсутствует")
         options = question_data.get("options", [])
         correct_answer = question_data.get("correct", None)
         degree = question_data.get("degree", "")
-        is_text_question = not options and degree != "Жұмбақтар"  # Для "Жұмбақтар" всегда отключаем текстовое поле
+        is_text_question = not options and degree != "Жұмбақтар"
 
         background = pygame.image.load(self.background_path)
         background = pygame.transform.scale(background, (WIDTH, HEIGHT))
@@ -130,10 +186,10 @@ class QuestionDisplay:
         timer_seconds = 10 if degree == "Жұмбақтар" else 15
         start_time = pygame.time.get_ticks()
 
-        # Расчёт позиций кнопок (если это не текстовый вопрос)
+        # Расчёт кнопок
         buttons = []
         if not is_text_question and degree != "Жұмбақтар":
-            start_y = HEIGHT // 2 - (len(options) * (self.button_height + self.button_margin)) // 2
+            start_y = HEIGHT // 2 - (len(options) * (self.button_height + self.button_margin)) // 2+90
             for i, option in enumerate(options):
                 button_rect = pygame.Rect(
                     WIDTH // 2 - self.button_width // 2,
@@ -143,7 +199,7 @@ class QuestionDisplay:
                 )
                 buttons.append((button_rect, option))
 
-        selected_answer = None  # Для фиксации выбора пользователя
+        selected_answer = None
 
         while running:
             elapsed_time = (pygame.time.get_ticks() - start_time) // 1000
@@ -151,19 +207,24 @@ class QuestionDisplay:
 
             self.screen.blit(background, (0, 0))
 
-            # Отображение таймера
+            # Таймер
             timer_surface = self.font.render(f"Уақыты: {remaining_time} секунд", True, (255, 0, 0))
             timer_x = WIDTH // 2 - timer_surface.get_width() // 2
             timer_y = HEIGHT // 5
             self.screen.blit(timer_surface, (timer_x, timer_y))
 
-            # Отображение вопроса
-            question_surface = self.font.render(question_text, True, (255, 255, 255))
-            question_x = WIDTH // 2 - question_surface.get_width() // 2
-            question_y = HEIGHT // 3 - question_surface.get_height() // 2-35
-            self.screen.blit(question_surface, (question_x, question_y))
+            # Отображение текста с переносом
+            self.draw_multiline_text(
+                self.screen,
+                question_text,
+                x=WIDTH // 4,
+                y=HEIGHT // 3-30,
+                font=self.font,
+                color=(255, 255, 255),
+                max_words_per_line=8
+            )
 
-            if remaining_time == 0:  # Если время вышло
+            if remaining_time == 0:
                 running = False
                 if degree == "Жұмбақтар":
                     self.display_result_text_question("Уақыт аяқталды!")
@@ -173,12 +234,12 @@ class QuestionDisplay:
                     self.display_result(None, correct_answer)
 
             if is_text_question:
-                # Текстовый ввод
+                # Поле для ввода текста
                 pygame.draw.rect(self.screen, (255, 255, 255), input_box, border_radius=10)
                 text_surface = self.font.render(user_text, True, (0, 0, 0))
                 self.screen.blit(text_surface, (input_box.x + 10, input_box.y + 10))
             elif degree != "Жұмбақтар":
-                # Кнопки ответов
+                # Кнопки для выбора ответа
                 for button_rect, option in buttons:
                     pygame.draw.rect(self.screen, (50, 50, 50), button_rect, border_radius=10)
                     pygame.draw.rect(self.screen, (255, 255, 255), button_rect, 2, border_radius=10)
@@ -226,21 +287,20 @@ class QuestionDisplay:
         pygame.display.flip()
         time.sleep(3)
 
-    def display_result_text_question(self, user_text):
+    def display_completion_message(self):
         """
-        Показывает сообщение после текстового ответа.
+        Отображает сообщение, когда все уровни завершены.
         """
         background = pygame.image.load(self.background_path)
         background = pygame.transform.scale(background, (WIDTH, HEIGHT))
         self.screen.blit(background, (0, 0))
 
-        result_text = f"Сіздің жауабыныз: {user_text}"
-        result_surface = self.font.render(result_text, True, (255, 255, 255))
-        result_x = WIDTH // 2 - result_surface.get_width() // 2
-        result_y = HEIGHT // 2 - result_surface.get_height() // 2
-        self.screen.blit(result_surface, (result_x, result_y))
+        message_surface = self.font.render("Барлық деңгейлер аяқталды!", True, (0, 255, 0))
+        message_x = WIDTH // 2 - message_surface.get_width() // 2
+        message_y = HEIGHT // 2 - message_surface.get_height() // 2
+        self.screen.blit(message_surface, (message_x, message_y))
         pygame.display.flip()
-        time.sleep(3)
+        time.sleep(5)
 
 #north
 question_display_akhmet = QuestionDisplay(
